@@ -1,4 +1,4 @@
-# Gestión de horarios — Bargas
+# Lalo Servicios — Gestión de horarios
 
 Aplicación de escritorio para gestionar la planilla de sueldos y horarios de empleados.
 
@@ -23,23 +23,24 @@ pip install customtkinter openpyxl
 
 ## Cómo usar
 
-1. Colocá el archivo `planilla.xlsx` en la misma carpeta que `app.py`
-2. Hacé doble clic en `iniciar.bat`  (o ejecutá `python app.py` desde la terminal)
-
-Si la planilla no está en la misma carpeta, la app te va a pedir que la selecciones.
+1. Colocá el archivo `planilla.xlsx` en la misma carpeta que `main.py` (solo la primera vez, para migrar datos)
+2. Hacé doble clic en `iniciar.bat` (o ejecutá `python main.py` desde la terminal)
 
 ---
 
 ## Funciones disponibles
 
-| Función           | Cómo usarla                                 |
-|-------------------|---------------------------------------------|
-| Ver empleados     | Se carga automáticamente al abrir           |
-| Buscar empleado   | Escribir en el campo de búsqueda            |
-| Agregar empleado  | Botón "+ Nuevo"                             |
-| Editar empleado   | Seleccionarlo y hacer doble clic, o "Editar"|
-| Eliminar empleado | Seleccionarlo y hacer clic en "Eliminar"    |
-| Guardar Excel     | Botón "Guardar Excel" en el menú lateral    |
+| Función           | Cómo usarla                                         |
+|-------------------|-----------------------------------------------------|
+| Ver empleados     | Se carga automáticamente al abrir                   |
+| Buscar empleado   | Escribir en el campo de búsqueda                    |
+| Agregar empleado  | Botón "+ Nuevo"                                     |
+| Editar empleado   | Doble clic, Enter, o botón "Editar"                 |
+| Eliminar empleado | Seleccionarlo y presionar Delete o botón "Eliminar" |
+| Registro diario   | Sección "Registro diario" en el menú lateral        |
+| Ver resumen anual | Sección "Resumen" en el menú lateral                |
+| Exportar Excel    | Botón "Exportar Excel" en el menú lateral           |
+| Importar Excel    | Botón "Importar Excel" en el menú lateral           |
 
 ---
 
@@ -49,7 +50,7 @@ Para distribuir la app sin que el usuario tenga Python instalado:
 
 ```
 pip install pyinstaller
-pyinstaller --onefile --windowed --name "GestionHorarios" app.py
+pyinstaller --onefile --windowed --name "LaloControl" --icon="favicon.ico" main.py
 ```
 
 El ejecutable queda en la carpeta `dist/`.
@@ -59,9 +60,23 @@ El ejecutable queda en la carpeta `dist/`.
 ## Estructura del proyecto
 
 ```
-app_horarios/
-├── app.py          ← código principal
-├── planilla.xlsx   ← tu Excel (copiar acá)
+lalo_servicios/
+├── main.py         ← entry point
+├── app.py          ← ventana principal
+├── constantes.py   ← colores, columnas, configuración
+├── db.py           ← base de datos SQLite
+├── excel.py        ← importar y exportar Excel
+├── dialogs.py      ← ventana de edición de empleados
+├── registro.py     ← sección de registro diario
+├── favicon.ico     ← ícono de la app
 ├── iniciar.bat     ← acceso directo para Windows
 └── README.md       ← este archivo
 ```
+
+---
+
+## Notas
+
+- Los datos se guardan automáticamente en `horarios.db` (SQLite).
+- La `planilla.xlsx` solo se usa la primera vez para migrar datos existentes.
+- Al cerrar la app, se ofrece exportar la planilla del mes actual a Excel.
