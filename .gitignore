@@ -8,13 +8,13 @@ build/
 dist/
 *.spec
 
-# Base de datos (datos locales, no van al repo)
+# Base de datos
 horarios.db
 
 # Excel de migración inicial
 planilla.xlsx
 
-# Entorno virtual si usás uno
+# Entorno virtual
 venv/
 .venv/
 
