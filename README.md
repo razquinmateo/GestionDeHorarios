@@ -1,4 +1,4 @@
-# Lalo Servicios — Gestión de horarios
+# Gestión de horarios
 
 Aplicación de escritorio para gestionar la planilla de sueldos y horarios de empleados.
 
