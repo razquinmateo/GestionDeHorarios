@@ -44,19 +44,6 @@ pip install customtkinter openpyxl
 
 ---
 
-## Convertir a .exe (opcional)
-
-Para distribuir la app sin que el usuario tenga Python instalado:
-
-```
-pip install pyinstaller
-pyinstaller --onefile --windowed --name "LaloControl" --icon="favicon.ico" main.py
-```
-
-El ejecutable queda en la carpeta `dist/`.
-
----
-
 ## Estructura del proyecto
 
 ```
