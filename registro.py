@@ -118,8 +118,14 @@ class FrameRegistro(ctk.CTkFrame):
                 hover_color=C_BLUE,
                 command=lambda tipo=etiqueta: self._seleccionar_tipo(tipo),
             )
+            left_pad = 8 if i == 0 else 4
+            right_pad = 8 if i == len(self.TIPOS_REGISTRO) - 1 else 4
             btn.grid(
-                row=0, column=i, padx=(0 if i == 0 else 2, 0), pady=8, sticky="nsew"
+                row=0,
+                column=i,
+                padx=(left_pad, right_pad),
+                pady=8,
+                sticky="nsew",
             )
             self.tipo_buttons[etiqueta] = btn
         self._actualizar_tipo_botones()
