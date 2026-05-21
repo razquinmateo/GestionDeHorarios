@@ -53,9 +53,19 @@ def db_inicializar():
             empleado_id INTEGER NOT NULL REFERENCES empleados(id),
             fecha       TEXT NOT NULL,
             horas       REAL DEFAULT 0,
+            hrs_extras  REAL DEFAULT 0,
+            hrs_noct    REAL DEFAULT 0,
             UNIQUE(empleado_id, fecha)
         )
     """)
+    try:
+        con.execute("ALTER TABLE registro_diario ADD COLUMN hrs_extras REAL DEFAULT 0")
+    except Exception:
+        pass
+    try:
+        con.execute("ALTER TABLE registro_diario ADD COLUMN hrs_noct REAL DEFAULT 0")
+    except Exception:
+        pass
     con.commit()
     con.close()
 
@@ -227,7 +237,12 @@ def db_cargar_empleados_activos():
     return [r[0] for r in rows]
 
 
-def db_cargar_registro_diario(nombre, mes, anio):
+def _columna_registro(tipo):
+    return tipo if tipo in ("horas", "hrs_extras", "hrs_noct") else "horas"
+
+
+def db_cargar_registro_diario(nombre, mes, anio, columna="horas"):
+    columna = _columna_registro(columna)
     con = db_connect()
     cur = con.cursor()
     emp = cur.execute("SELECT id FROM empleados WHERE nombre=?", (nombre,)).fetchone()
@@ -235,36 +250,66 @@ def db_cargar_registro_diario(nombre, mes, anio):
         con.close()
         return {}
     rows = cur.execute(
-        """
-        SELECT fecha, horas FROM registro_diario
+        f"""
+        SELECT fecha, {columna} FROM registro_diario
         WHERE empleado_id=? AND strftime('%m', fecha)=? AND strftime('%Y', fecha)=?
     """,
         (emp[0], f"{mes:02d}", str(anio)),
     ).fetchall()
     con.close()
-    return {r[0]: r[1] for r in rows}
+    return {r[0]: r[1] or 0 for r in rows}
 
 
-def db_guardar_registro_dia(nombre, fecha_str, horas):
+def db_guardar_registro_dia(nombre, fecha_str, columna, horas):
+    columna = _columna_registro(columna)
     con = db_connect()
     cur = con.cursor()
     emp = cur.execute("SELECT id FROM empleados WHERE nombre=?", (nombre,)).fetchone()
     if emp is None:
         con.close()
         return
+
     if horas == 0:
-        cur.execute(
-            "DELETE FROM registro_diario WHERE empleado_id=? AND fecha=?",
+        existing = cur.execute(
+            "SELECT horas, hrs_extras, hrs_noct FROM registro_diario WHERE empleado_id=? AND fecha=?",
             (emp[0], fecha_str),
-        )
-    else:
+        ).fetchone()
+        if existing is None:
+            con.close()
+            return
         cur.execute(
-            """
-            INSERT INTO registro_diario (empleado_id, fecha, horas)
-            VALUES (?, ?, ?)
-            ON CONFLICT(empleado_id, fecha) DO UPDATE SET horas=excluded.horas
-        """,
-            (emp[0], fecha_str, horas),
+            f"UPDATE registro_diario SET {columna}=? WHERE empleado_id=? AND fecha=?",
+            (0.0, emp[0], fecha_str),
+        )
+        updated = cur.execute(
+            "SELECT horas, hrs_extras, hrs_noct FROM registro_diario WHERE empleado_id=? AND fecha=?",
+            (emp[0], fecha_str),
+        ).fetchone()
+        if updated and all((v is None or float(v) == 0.0) for v in updated):
+            cur.execute(
+                "DELETE FROM registro_diario WHERE empleado_id=? AND fecha=?",
+                (emp[0], fecha_str),
+            )
+    else:
+        valores = {
+            "horas": 0.0,
+            "hrs_extras": 0.0,
+            "hrs_noct": 0.0,
+        }
+        valores[columna] = horas
+        cur.execute(
+            f"""
+            INSERT INTO registro_diario (empleado_id, fecha, horas, hrs_extras, hrs_noct)
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(empleado_id, fecha) DO UPDATE SET {columna}=excluded.{columna}
+            """,
+            (
+                emp[0],
+                fecha_str,
+                valores["horas"],
+                valores["hrs_extras"],
+                valores["hrs_noct"],
+            ),
         )
     con.commit()
     con.close()
@@ -302,16 +347,38 @@ def db_sincronizar_total_diario(nombre, mes, anio):
             except ValueError:
                 horas_base = 0.0
 
-    registros = db_cargar_registro_diario(nombre, mes, anio)
-    total_diario = sum(v for v in registros.values() if v > 0)
+    registros = cur.execute(
+        """
+        SELECT SUM(horas), SUM(hrs_extras), SUM(hrs_noct)
+        FROM registro_diario
+        WHERE empleado_id=? AND strftime('%m', fecha)=? AND strftime('%Y', fecha)=?
+    """,
+        (emp[0], f"{mes:02d}", str(anio)),
+    ).fetchone()
+
+    total_diario = float(registros[0] or 0)
+    total_extras = float(registros[1] or 0)
+    total_noct = float(registros[2] or 0)
     total_final = horas_base + total_diario
-    total_str = (
-        str(int(total_final)) if total_final == int(total_final) else str(total_final)
-    )
+
+    def _format(valor):
+        if valor == 0:
+            return ""
+        return str(int(valor)) if valor == int(valor) else str(valor)
 
     cur.execute(
-        "UPDATE planillas SET horas=?, origen='diario' WHERE empleado_id=? AND mes=? AND anio=?",
-        (total_str if total_final > 0 else "", emp[0], mes, anio),
+        """
+        UPDATE planillas SET horas=?, hrs_extras=?, hrs_noct=?, origen='diario'
+        WHERE empleado_id=? AND mes=? AND anio=?
+    """,
+        (
+            _format(total_final),
+            _format(total_extras),
+            _format(total_noct),
+            emp[0],
+            mes,
+            anio,
+        ),
     )
     con.commit()
     con.close()
