@@ -62,6 +62,8 @@ class AppHorarios(ctk.CTk):
         self.empleados = []
         self.busqueda = tk.StringVar()
         self.busqueda.trace_add("write", lambda *_: self._filtrar())
+        self.busqueda_placeholder = "Buscar empleado"
+        self.busqueda_es_placeholder = False
 
         db_inicializar()
         self._migrar_excel_si_necesario()
@@ -211,12 +213,19 @@ class AppHorarios(ctk.CTk):
 
         toolbar = ctk.CTkFrame(self.frame_empleados, fg_color="transparent")
         toolbar.grid(row=0, column=0, padx=16, pady=(0, 6), sticky="new")
-        ctk.CTkEntry(
+        self.entry_busqueda = ctk.CTkEntry(
             toolbar,
-            placeholder_text="Buscar empleado...",
+            fg_color="white",
+            border_width=1,
+            border_color=C_GRAY200,
             textvariable=self.busqueda,
             width=200,
-        ).pack(side="left")
+            text_color=C_GRAY800,
+        )
+        self.entry_busqueda.pack(side="left")
+        self.entry_busqueda.bind("<FocusIn>", self._on_busqueda_focus_in)
+        self.entry_busqueda.bind("<FocusOut>", self._on_busqueda_focus_out)
+        self._mostrar_placeholder_busqueda()
         ctk.CTkButton(
             toolbar,
             text="+ Nuevo",
@@ -437,7 +446,7 @@ class AppHorarios(ctk.CTk):
                     tag = ""
                 self.tree.insert("", "end", values=vals, tags=(tag,))
         self.tree.tag_configure("mes", foreground="#854F0B", background="#FAEEDA")
-        self.tree.tag_configure("diario", foreground=C_NAVY, background=C_BLUE_LIGHT)
+        self.tree.tag_configure("diario", foreground=C_NAVY, background="")
 
     def _refrescar_stats(self):
         t = calcular_totales(self.empleados)
@@ -449,7 +458,27 @@ class AppHorarios(ctk.CTk):
         )
 
     def _filtrar(self):
-        self._refrescar_tabla(self.busqueda.get())
+        if not hasattr(self, "tree"):
+            return
+        texto = self.busqueda.get()
+        if self.busqueda_es_placeholder or texto == self.busqueda_placeholder:
+            texto = ""
+        self._refrescar_tabla(texto)
+
+    def _on_busqueda_focus_in(self, event=None):
+        if self.busqueda_es_placeholder:
+            self.busqueda_es_placeholder = False
+            self.busqueda.set("")
+            self.entry_busqueda.configure(text_color=C_GRAY800)
+
+    def _on_busqueda_focus_out(self, event=None):
+        if not self.busqueda.get().strip():
+            self._mostrar_placeholder_busqueda()
+
+    def _mostrar_placeholder_busqueda(self):
+        self.busqueda_es_placeholder = True
+        self.busqueda.set(self.busqueda_placeholder)
+        self.entry_busqueda.configure(text_color=C_GRAY400)
 
     def _actualizar_panel_obs(self, event=None):
         sel = self.tree.selection()
