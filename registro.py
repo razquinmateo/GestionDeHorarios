@@ -207,13 +207,29 @@ class FrameRegistro(ctk.CTkFrame):
 
         self._actualizar_resumen(registros)
 
+    def _parse_horas(self, txt):
+        txt = txt.strip().replace(" ", "").replace(",", ".")
+        if not txt:
+            return 0.0
+
+        txt = txt.replace(":", "-")
+        if "-" in txt:
+            partes = txt.split("-", 1)
+            if len(partes) == 2 and partes[0] and partes[1]:
+                inicio = float(partes[0])
+                fin = float(partes[1])
+                return max(0.0, fin - inicio)
+            raise ValueError("Formato de horas inválido")
+
+        return float(txt)
+
     def _on_cambio(self, fecha_str, var):
         nombre = self.empleado_actual.get()
         if not nombre:
             return
-        txt = var.get().strip().replace(",", ".")
+        txt = var.get().strip()
         try:
-            horas = float(txt) if txt else 0.0
+            horas = self._parse_horas(txt)
         except ValueError:
             horas = 0.0
             var.set("")
