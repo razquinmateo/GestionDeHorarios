@@ -8,6 +8,24 @@ from constantes import (
     C_GRAY100, C_GRAY200, C_GRAY400, C_GRAY600, C_GRAY800, C_RED,
     DIAS_SEMANA,
 )
+
+
+def parse_horas(txt):
+    txt = txt.strip().replace(" ", "").replace(",", ".")
+    if not txt:
+        return 0.0
+
+    txt = txt.replace(":", "-")
+    if "-" in txt:
+        partes = txt.split("-", 1)
+        if len(partes) == 2 and partes[0] and partes[1]:
+            inicio = float(partes[0])
+            fin = float(partes[1])
+            return max(0.0, fin - inicio)
+        raise ValueError("Formato de horas inválido")
+
+    return float(txt)
+
 from db import (
     db_cargar_empleados_activos,
     db_cargar_registro_diario,
@@ -208,20 +226,7 @@ class FrameRegistro(ctk.CTkFrame):
         self._actualizar_resumen(registros)
 
     def _parse_horas(self, txt):
-        txt = txt.strip().replace(" ", "").replace(",", ".")
-        if not txt:
-            return 0.0
-
-        txt = txt.replace(":", "-")
-        if "-" in txt:
-            partes = txt.split("-", 1)
-            if len(partes) == 2 and partes[0] and partes[1]:
-                inicio = float(partes[0])
-                fin = float(partes[1])
-                return max(0.0, fin - inicio)
-            raise ValueError("Formato de horas inválido")
-
-        return float(txt)
+        return parse_horas(txt)
 
     def _on_cambio(self, fecha_str, var):
         nombre = self.empleado_actual.get()
