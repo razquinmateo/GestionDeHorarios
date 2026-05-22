@@ -99,16 +99,16 @@ class DialogEmpleado(ctk.CTkToplevel):
         self.entries["Empleado"] = entry_emp
 
         if not solo_nombre:
-            top_grid = ctk.CTkFrame(frame, fg_color="transparent")
-            top_grid.pack(fill="x", pady=(12, 0))
-            top_grid.columnconfigure(0, weight=1)
-            top_grid.columnconfigure(1, weight=1)
+            grid = ctk.CTkFrame(frame, fg_color="transparent")
+            grid.pack(fill="x", pady=(12, 0))
+            grid.columnconfigure(0, weight=1)
+            grid.columnconfigure(1, weight=1)
 
             for key, label_text, hint, columna in [
-                ("Horas diarias", "Horas diarias", "Ej: 8 o 8-16", 0),
-                ("Horas", "Horas totales", "Ej: 90 o EL MES", 1),
+                ("Horas", "Horas totales", "Ej: 90 o EL MES", 0),
+                ("Hrs. Extras", "Hrs. Extras", "Ej: 15.5", 1),
             ]:
-                sub = ctk.CTkFrame(top_grid, fg_color="transparent")
+                sub = ctk.CTkFrame(grid, fg_color="transparent")
                 sub.grid(
                     row=0,
                     column=columna,
@@ -127,33 +127,26 @@ class DialogEmpleado(ctk.CTkToplevel):
                     entry.insert(0, datos[key])
                 self.entries[key] = entry
 
-                if key == "Horas diarias":
+                if key == "Horas":
                     ToolTip(
                         entry,
-                        "Ingresa un número o un rango como 8-16 o 8:16.\nSe sumará a las horas totales.",
-                    )
-                elif key == "Horas":
-                    ToolTip(
-                        entry,
-                        "Horas totales del mes.\nSi también ingresas horas diarias, esas se suman al total.",
+                        "Horas totales del mes.",
                     )
 
-            grid = ctk.CTkFrame(frame, fg_color="transparent")
-            grid.pack(fill="x", pady=(0, 0))
-            grid.columnconfigure(0, weight=1)
-            grid.columnconfigure(1, weight=1)
-            grid.columnconfigure(2, weight=1)
+            bottom_grid = ctk.CTkFrame(frame, fg_color="transparent")
+            bottom_grid.pack(fill="x", pady=(0, 0))
+            bottom_grid.columnconfigure(0, weight=1)
+            bottom_grid.columnconfigure(1, weight=1)
 
             for key, label_text, hint, columna in [
-                ("Hrs. Extras", "Hrs. Extras", "Ej: 15.5", 0),
-                ("Hrs. Noct.", "Hrs. Noct.", "Ej: 8", 1),
-                ("Adelanto", "Adelanto", "Ej: 10000", 2),
+                ("Hrs. Noct.", "Hrs. Noct.", "Ej: 8", 0),
+                ("Adelanto", "Adelanto", "Ej: 10000", 1),
             ]:
-                sub = ctk.CTkFrame(grid, fg_color="transparent")
+                sub = ctk.CTkFrame(bottom_grid, fg_color="transparent")
                 sub.grid(
                     row=0,
                     column=columna,
-                    padx=(0, 6) if columna != 2 else 0,
+                    padx=(0, 6) if columna == 0 else 0,
                     pady=4,
                     sticky="ew",
                 )
@@ -229,19 +222,6 @@ class DialogEmpleado(ctk.CTkToplevel):
         else:
             self.result = {}
 
-            horas_diarias_txt = self.entries["Horas diarias"].get().strip()
-            horas_diarias = 0.0
-            if horas_diarias_txt:
-                try:
-                    horas_diarias = parse_horas(horas_diarias_txt)
-                except ValueError:
-                    messagebox.showwarning(
-                        "Valor inválido",
-                        f"'{horas_diarias_txt}' no es un valor válido para Horas diarias.",
-                        parent=self,
-                    )
-                    return
-
             for col in COLS_EDITAR:
                 widget = self.entries[col]
                 if col == "Observaciones":
@@ -272,27 +252,4 @@ class DialogEmpleado(ctk.CTkToplevel):
                             )
                             return
                     self.result[col] = val
-
-            if horas_diarias:
-                horas_totales = self.result.get("Horas", "")
-                if horas_totales.upper() == "EL MES":
-                    messagebox.showwarning(
-                        "Atención",
-                        "No se puede sumar Horas diarias cuando Horas totales es EL MES.",
-                        parent=self,
-                    )
-                    return
-                try:
-                    base = float(horas_totales) if horas_totales else 0.0
-                except ValueError:
-                    messagebox.showwarning(
-                        "Valor inválido",
-                        f"'{horas_totales}' no es un número válido para Horas totales.",
-                        parent=self,
-                    )
-                    return
-                total = base + horas_diarias
-                self.result["Horas"] = (
-                    str(int(total)) if total == int(total) else str(total)
-                )
         self.destroy()

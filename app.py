@@ -537,7 +537,8 @@ class AppHorarios(ctk.CTk):
             db_guardar_fila(
                 emp_original["Empleado"], self.mes_actual, self.anio_actual, dlg.result
             )
-            self._refrescar_tabla(self.busqueda.get())
+            # Usar _filtrar() para respetar el placeholder de búsqueda
+            self._filtrar()
             self._refrescar_stats()
             for item in self.tree.get_children():
                 if self.tree.item(item, "values")[0] == emp_original["Empleado"]:

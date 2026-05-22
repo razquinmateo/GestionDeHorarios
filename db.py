@@ -47,6 +47,14 @@ def db_inicializar():
         con.execute("ALTER TABLE planillas ADD COLUMN horas_base TEXT DEFAULT ''")
     except Exception:
         pass
+    try:
+        con.execute("ALTER TABLE planillas ADD COLUMN hrs_extras_base TEXT DEFAULT ''")
+    except Exception:
+        pass
+    try:
+        con.execute("ALTER TABLE planillas ADD COLUMN hrs_noct_base TEXT DEFAULT ''")
+    except Exception:
+        pass
     con.execute("""
         CREATE TABLE IF NOT EXISTS registro_diario (
             id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -162,11 +170,23 @@ def db_guardar_fila(nombre, mes, anio, datos):
     if emp is None:
         con.close()
         return
+
+    # Convertir a float las entradas manuales para almacenarlas como "base"
+    def _to_float(v):
+        try:
+            return float(str(v).replace(" ", "").replace(",", "."))
+        except Exception:
+            return 0.0
+
+    horas_base_val = _to_float(datos.get("Horas", ""))
+    extras_base_val = _to_float(datos.get("Hrs. Extras", ""))
+    noct_base_val = _to_float(datos.get("Hrs. Noct.", ""))
+
     cur.execute(
         """
         UPDATE planillas SET
             horas=?, hrs_extras=?, hrs_noct=?, adelanto=?, observaciones=?,
-            origen='manual', horas_base=''
+            origen='manual', horas_base=?, hrs_extras_base=?, hrs_noct_base=?
         WHERE empleado_id=? AND mes=? AND anio=?
     """,
         (
@@ -175,10 +195,35 @@ def db_guardar_fila(nombre, mes, anio, datos):
             datos["Hrs. Noct."],
             datos["Adelanto"],
             datos["Observaciones"],
+            # guardar como string vacío si no hay base numérica
+            (
+                str(int(horas_base_val))
+                if horas_base_val == int(horas_base_val) and horas_base_val != 0
+                else (str(horas_base_val) if horas_base_val != 0 else "")
+            ),
+            (
+                str(int(extras_base_val))
+                if extras_base_val == int(extras_base_val) and extras_base_val != 0
+                else (str(extras_base_val) if extras_base_val != 0 else "")
+            ),
+            (
+                str(int(noct_base_val))
+                if noct_base_val == int(noct_base_val) and noct_base_val != 0
+                else (str(noct_base_val) if noct_base_val != 0 else "")
+            ),
             emp[0],
             mes,
             anio,
         ),
+    )
+    # Al guardar manualmente la fila mensual, eliminar registros diarios
+    # de ese empleado correspondientes al mismo mes (no otros meses).
+    cur.execute(
+        """
+        DELETE FROM registro_diario
+        WHERE empleado_id=? AND strftime('%m', fecha)=? AND strftime('%Y', fecha)=?
+    """,
+        (emp[0], f"{mes:02d}", str(anio)),
     )
     con.commit()
     con.close()
@@ -346,19 +391,35 @@ def db_sincronizar_total_diario(nombre, mes, anio):
 
     # Si hay datos en registro_diario, usarlos y marcar como 'diario'
     if total_diario > 0 or total_extras > 0 or total_noct > 0:
+
         fila = cur.execute(
-            "SELECT horas_base FROM planillas WHERE empleado_id=? AND mes=? AND anio=?",
+            "SELECT horas_base, hrs_extras_base, hrs_noct_base FROM planillas WHERE empleado_id=? AND mes=? AND anio=?",
             (emp[0], mes, anio),
         ).fetchone()
 
         horas_base = 0.0
-        if fila and fila[0]:
-            try:
-                horas_base = float(fila[0])
-            except ValueError:
-                horas_base = 0.0
+        extras_base = 0.0
+        noct_base = 0.0
+        if fila:
+            if fila[0]:
+                try:
+                    horas_base = float(fila[0])
+                except Exception:
+                    horas_base = 0.0
+            if len(fila) > 1 and fila[1]:
+                try:
+                    extras_base = float(fila[1])
+                except Exception:
+                    extras_base = 0.0
+            if len(fila) > 2 and fila[2]:
+                try:
+                    noct_base = float(fila[2])
+                except Exception:
+                    noct_base = 0.0
 
         total_final = horas_base + total_diario
+        total_extras_final = extras_base + total_extras
+        total_noct_final = noct_base + total_noct
 
         def _format(valor):
             if valor == 0:
@@ -367,14 +428,16 @@ def db_sincronizar_total_diario(nombre, mes, anio):
 
         cur.execute(
             """
-            UPDATE planillas SET horas=?, hrs_extras=?, hrs_noct=?, origen='diario', horas_base=?
+            UPDATE planillas SET horas=?, hrs_extras=?, hrs_noct=?, origen='diario', horas_base=?, hrs_extras_base=?, hrs_noct_base=?
             WHERE empleado_id=? AND mes=? AND anio=?
         """,
             (
                 _format(total_final),
-                _format(total_extras),
-                _format(total_noct),
+                _format(total_extras_final),
+                _format(total_noct_final),
                 str(horas_base) if horas_base > 0 else "",
+                str(extras_base) if extras_base > 0 else "",
+                str(noct_base) if noct_base > 0 else "",
                 emp[0],
                 mes,
                 anio,
