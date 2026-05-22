@@ -269,39 +269,45 @@ def db_guardar_registro_dia(nombre, fecha_str, columna, horas):
         con.close()
         return
 
-    if horas == 0:
-        existing = cur.execute(
-            "SELECT horas, hrs_extras, hrs_noct FROM registro_diario WHERE empleado_id=? AND fecha=?",
-            (emp[0], fecha_str),
-        ).fetchone()
-        if existing is None:
-            con.close()
-            return
-        cur.execute(
-            f"UPDATE registro_diario SET {columna}=? WHERE empleado_id=? AND fecha=?",
-            (0.0, emp[0], fecha_str),
-        )
-        updated = cur.execute(
-            "SELECT horas, hrs_extras, hrs_noct FROM registro_diario WHERE empleado_id=? AND fecha=?",
-            (emp[0], fecha_str),
-        ).fetchone()
-        if updated and all((v is None or float(v) == 0.0) for v in updated):
-            cur.execute(
-                "DELETE FROM registro_diario WHERE empleado_id=? AND fecha=?",
-                (emp[0], fecha_str),
-            )
-    else:
+    # Leer valores actuales para preservarlos
+    existing = cur.execute(
+        "SELECT horas, hrs_extras, hrs_noct FROM registro_diario WHERE empleado_id=? AND fecha=?",
+        (emp[0], fecha_str),
+    ).fetchone()
+
+    if existing is None:
+        # Nueva fila: inicializar con ceros y el valor en la columna especificada
         valores = {
             "horas": 0.0,
             "hrs_extras": 0.0,
             "hrs_noct": 0.0,
         }
         valores[columna] = horas
+    else:
+        # Fila existente: preservar valores actuales
+        valores = {
+            "horas": float(existing[0]) if existing[0] is not None else 0.0,
+            "hrs_extras": float(existing[1]) if existing[1] is not None else 0.0,
+            "hrs_noct": float(existing[2]) if existing[2] is not None else 0.0,
+        }
+        valores[columna] = horas
+
+    # Si todos los valores son 0, eliminar el registro
+    if all(v == 0.0 for v in valores.values()):
+        cur.execute(
+            "DELETE FROM registro_diario WHERE empleado_id=? AND fecha=?",
+            (emp[0], fecha_str),
+        )
+    else:
+        # Insertar o actualizar con todos los valores preservados
         cur.execute(
             f"""
             INSERT INTO registro_diario (empleado_id, fecha, horas, hrs_extras, hrs_noct)
             VALUES (?, ?, ?, ?, ?)
-            ON CONFLICT(empleado_id, fecha) DO UPDATE SET {columna}=excluded.{columna}
+            ON CONFLICT(empleado_id, fecha) DO UPDATE SET 
+                horas=excluded.horas, 
+                hrs_extras=excluded.hrs_extras, 
+                hrs_noct=excluded.hrs_noct
             """,
             (
                 emp[0],
@@ -324,29 +330,7 @@ def db_sincronizar_total_diario(nombre, mes, anio):
         con.close()
         return
 
-    fila = cur.execute(
-        "SELECT horas, origen, horas_base FROM planillas WHERE empleado_id=? AND mes=? AND anio=?",
-        (emp[0], mes, anio),
-    ).fetchone()
-
-    horas_base = 0.0
-    if fila:
-        horas_actual, origen_actual, horas_base_guardada = fila
-        if origen_actual == "manual" and horas_actual:
-            try:
-                horas_base = float(horas_actual.strip())
-            except ValueError:
-                horas_base = 0.0
-            cur.execute(
-                "UPDATE planillas SET horas_base=? WHERE empleado_id=? AND mes=? AND anio=?",
-                (str(horas_base), emp[0], mes, anio),
-            )
-        elif horas_base_guardada:
-            try:
-                horas_base = float(horas_base_guardada)
-            except ValueError:
-                horas_base = 0.0
-
+    # Verificar si hay datos en registro_diario
     registros = cur.execute(
         """
         SELECT SUM(horas), SUM(hrs_extras), SUM(hrs_noct)
@@ -359,26 +343,43 @@ def db_sincronizar_total_diario(nombre, mes, anio):
     total_diario = float(registros[0] or 0)
     total_extras = float(registros[1] or 0)
     total_noct = float(registros[2] or 0)
-    total_final = horas_base + total_diario
 
-    def _format(valor):
-        if valor == 0:
-            return ""
-        return str(int(valor)) if valor == int(valor) else str(valor)
+    # Si hay datos en registro_diario, usarlos y marcar como 'diario'
+    if total_diario > 0 or total_extras > 0 or total_noct > 0:
+        fila = cur.execute(
+            "SELECT horas_base FROM planillas WHERE empleado_id=? AND mes=? AND anio=?",
+            (emp[0], mes, anio),
+        ).fetchone()
 
-    cur.execute(
-        """
-        UPDATE planillas SET horas=?, hrs_extras=?, hrs_noct=?, origen='diario'
-        WHERE empleado_id=? AND mes=? AND anio=?
-    """,
-        (
-            _format(total_final),
-            _format(total_extras),
-            _format(total_noct),
-            emp[0],
-            mes,
-            anio,
-        ),
-    )
+        horas_base = 0.0
+        if fila and fila[0]:
+            try:
+                horas_base = float(fila[0])
+            except ValueError:
+                horas_base = 0.0
+
+        total_final = horas_base + total_diario
+
+        def _format(valor):
+            if valor == 0:
+                return ""
+            return str(int(valor)) if valor == int(valor) else str(valor)
+
+        cur.execute(
+            """
+            UPDATE planillas SET horas=?, hrs_extras=?, hrs_noct=?, origen='diario', horas_base=?
+            WHERE empleado_id=? AND mes=? AND anio=?
+        """,
+            (
+                _format(total_final),
+                _format(total_extras),
+                _format(total_noct),
+                str(horas_base) if horas_base > 0 else "",
+                emp[0],
+                mes,
+                anio,
+            ),
+        )
+
     con.commit()
     con.close()
