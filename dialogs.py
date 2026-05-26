@@ -1,8 +1,7 @@
 import customtkinter as ctk
 import tkinter as tk
 from tkinter import messagebox
-
-from constantes import C_BLUE, C_NAVY, COLS_EDITAR
+from constantes import C_BLUE, C_NAVY, COLS_EDITAR, C_GRAY600
 from registro import parse_horas
 
 
@@ -75,11 +74,21 @@ class DialogEmpleado(ctk.CTkToplevel):
         self.result = None
         self.solo_nombre = solo_nombre
         datos = datos or {}
+        self.entries_datos_originales = datos
         self.entries = {}
 
         ctk.CTkLabel(self, text=titulo, font=ctk.CTkFont(size=17, weight="bold")).pack(
             pady=(24, 18)
         )
+
+        if not solo_nombre:
+            ctk.CTkLabel(
+                self,
+                text="⚠️ Los cambios guardados aquí reemplazan\nlos datos del registro diario de este mes.",
+                font=ctk.CTkFont(size=11),
+                text_color=C_GRAY600,
+                justify="center",
+            ).pack(pady=(0, 12))
 
         frame = ctk.CTkFrame(self, fg_color="transparent")
         frame.pack(fill="x", padx=36)
@@ -197,7 +206,7 @@ class DialogEmpleado(ctk.CTkToplevel):
 
         self.update_idletasks()
         ancho = 440
-        alto = 200 if solo_nombre else 520
+        alto = 200 if solo_nombre else 560
         x = parent.winfo_x() + (parent.winfo_width() // 2) - (ancho // 2)
         y = parent.winfo_y() + (parent.winfo_height() // 2) - (alto // 2)
         self.geometry(f"{ancho}x{alto}+{x}+{y}")
@@ -243,7 +252,11 @@ class DialogEmpleado(ctk.CTkToplevel):
                     val = widget.get().strip()
                     if val and col in ("Hrs. Extras", "Hrs. Noct.", "Adelanto"):
                         try:
-                            float(val)
+                            if col == "Adelanto" and "+" in val:
+                                partes = val.split("+")
+                                val = str(sum(float(p.strip()) for p in partes))
+                            else:
+                                float(val)
                         except ValueError:
                             messagebox.showwarning(
                                 "Valor inválido",

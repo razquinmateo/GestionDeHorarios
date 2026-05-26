@@ -19,20 +19,43 @@ from constantes import (
 
 
 def parse_horas(txt):
-    txt = txt.strip().replace(" ", "").replace(",", ".")
+    # Convertimos a minúsculas y limpiamos espacios en los extremos
+    txt = txt.lower().strip()
     if not txt:
         return 0.0
 
-    txt = txt.replace(":", "-")
-    if "-" in txt:
-        partes = txt.split("-", 1)
-        if len(partes) == 2 and partes[0] and partes[1]:
-            inicio = float(partes[0])
-            fin = float(partes[1])
-            return max(0.0, fin - inicio)
-        raise ValueError("Formato de horas inválido")
+    # 1. Reemplazamos conectores comunes (" y ", "+", ";", ", ") por espacios
+    # Esto permite separar los rangos sin romper los números decimales como "8,5"
+    txt = txt.replace(" y ", " ").replace("+", " ").replace(";", " ").replace(", ", " ")
 
-    return float(txt)
+    # 2. Dividimos el texto usando los espacios (maneja múltiples espacios seguidos automáticamente)
+    bloques = txt.split()
+    total_horas = 0.0
+
+    # 3. Procesamos cada bloque individualmente (ej: "8-12", "13-17", o "8")
+    for bloque in bloques:
+        # Limpiamos posibles comas colgadas al final de un bloque
+        bloque = bloque.strip(",")
+
+        # Unificamos el formato de hora (ej. 8:12 pasa a ser 8-12)
+        bloque = bloque.replace(":", "-")
+
+        if "-" in bloque:
+            # Es un rango
+            partes = bloque.split("-", 1)
+            if len(partes) == 2 and partes[0] and partes[1]:
+                # Reemplazamos la coma por punto solo al momento de convertir a float
+                # (para soportar decimales como 8,5 -> 8.5)
+                inicio = float(partes[0].replace(",", "."))
+                fin = float(partes[1].replace(",", "."))
+                total_horas += max(0.0, fin - inicio)
+            else:
+                raise ValueError("Formato de rango inválido")
+        else:
+            # Es una cantidad de horas directa (ej: el usuario tipeó "8" o "8,5")
+            total_horas += float(bloque.replace(",", "."))
+
+    return total_horas
 
 
 from db import (
