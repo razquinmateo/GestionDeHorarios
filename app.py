@@ -39,6 +39,16 @@ ctk.set_appearance_mode("light")
 ctk.set_default_color_theme("blue")
 
 
+def decimal_a_tiempo(n):
+    if not n or n <= 0:
+        return ""
+    horas = int(n)
+    minutos = int(round((n - horas) * 60))
+    if minutos == 0:
+        return f"{horas}hs"
+    return f"{horas}hs {minutos}min"
+
+
 class AppHorarios(ctk.CTk):
     def __init__(self):
         super().__init__()
@@ -437,7 +447,16 @@ class AppHorarios(ctk.CTk):
         for emp in self.empleados:
             if filtro.lower() in emp["Empleado"].lower():
                 origen = emp.get("Origen", "manual")
-                vals = [emp[c] for c in COLS if c != "Observaciones"]
+
+                def _fmt(col, val):
+                    if col in ("Horas", "Hrs. Extras", "Hrs. Noct."):
+                        try:
+                            return decimal_a_tiempo(float(val)) if val else ""
+                        except (ValueError, TypeError):
+                            return val
+                    return val
+
+                vals = [_fmt(c, emp[c]) for c in COLS if c != "Observaciones"]
                 if str(emp["Horas"]).upper().strip().startswith("EL MES"):
                     tag = "mes"
                 elif origen == "diario":
@@ -567,7 +586,7 @@ class AppHorarios(ctk.CTk):
             carpeta_inicial = os.path.expanduser("~")
         path = filedialog.asksaveasfilename(
             defaultextension=".xlsx",
-            initialfile=f"planilla_{MESES[self.mes_actual-1]}_{self.anio_actual}.xlsx",
+            initialfile=f"planilla_{MESES[self.mes_actual - 1]}_{self.anio_actual}.xlsx",
             initialdir=carpeta_inicial,
             filetypes=[("Excel", "*.xlsx")],
         )
@@ -599,7 +618,7 @@ class AppHorarios(ctk.CTk):
         resp = messagebox.askyesnocancel(
             "Importar datos",
             f"Se encontraron {len(datos)} empleados.\n\n"
-            f"¿Desea REEMPLAZAR los datos de {MESES[self.mes_actual-1]} {self.anio_actual}?\n\n"
+            f"¿Desea REEMPLAZAR los datos de {MESES[self.mes_actual - 1]} {self.anio_actual}?\n\n"
             "Sí = reemplazar     No = agregar al final     Cancelar = cancelar",
         )
         if resp is None:
@@ -769,7 +788,7 @@ class AppHorarios(ctk.CTk):
 
         ctk.CTkLabel(
             frame,
-            text=f"Top horas — {MESES[self.mes_actual-1]} {self.anio_actual}",
+            text=f"Top horas — {MESES[self.mes_actual - 1]} {self.anio_actual}",
             font=ctk.CTkFont(size=13, weight="bold"),
             anchor="w",
         ).grid(row=0, column=0, padx=12, pady=(10, 8), sticky="w")

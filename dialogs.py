@@ -133,7 +133,13 @@ class DialogEmpleado(ctk.CTkToplevel):
                 )
                 entry.pack(fill="x")
                 if datos.get(key):
-                    entry.insert(0, datos[key])
+                    valor = datos[key]
+                    if key in ("Horas", "Hrs. Extras", "Hrs. Noct."):
+                        try:
+                            valor = f"{float(valor):.2f}"
+                        except ValueError:
+                            pass
+                    entry.insert(0, valor)
                 self.entries[key] = entry
 
                 if key == "Horas":
