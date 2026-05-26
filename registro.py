@@ -18,44 +18,73 @@ from constantes import (
 )
 
 
+def decimal_a_tiempo(n):
+    """Convierte 7.75 en '7:45'"""
+    if not n or n <= 0:
+        return ""
+
+    horas = int(n)
+    # Tomamos los decimales y los multiplicamos por 60
+    minutos = int(round((n - horas) * 60))
+
+    if minutos == 0:
+        return f"{horas}:00"
+    # El :02d es para que si son 5 minutos, muestre 05 y no 5
+    return f"{horas}:{minutos:02d}"
+
+
+def tiempo_a_decimal(cadena):
+    """
+    Convierte '8', '12:30' o '13:20' en su valor decimal.
+    8 -> 8.0
+    12:30 -> 12.5
+    13:20 -> 13.33
+    """
+    cadena = cadena.replace(",", ".").strip()
+    if ":" in cadena:
+        partes = cadena.split(":")
+        # Manejamos casos como ':30' o '8:'
+        h = float(partes[0]) if partes[0] else 0.0
+        m = float(partes[1]) if len(partes) > 1 and partes[1] else 0.0
+        return h + (m / 60)
+    return float(cadena) if cadena else 0.0
+
+
 def parse_horas(txt):
-    # Convertimos a minúsculas y limpiamos espacios en los extremos
     txt = txt.lower().strip()
     if not txt:
         return 0.0
 
-    # 1. Reemplazamos conectores comunes (" y ", "+", ";", ", ") por espacios
-    # Esto permite separar los rangos sin romper los números decimales como "8,5"
-    txt = txt.replace(" y ", " ").replace("+", " ").replace(";", " ").replace(", ", " ")
+    # 1. Reemplazamos conectores por espacios para separar los bloques
+    # Mantenemos los ":" y "-" intactos aquí
+    txt = txt.replace(" y ", " ").replace("+", " ").replace(";", " ")
 
-    # 2. Dividimos el texto usando los espacios (maneja múltiples espacios seguidos automáticamente)
     bloques = txt.split()
     total_horas = 0.0
 
-    # 3. Procesamos cada bloque individualmente (ej: "8-12", "13-17", o "8")
     for bloque in bloques:
-        # Limpiamos posibles comas colgadas al final de un bloque
         bloque = bloque.strip(",")
 
-        # Unificamos el formato de hora (ej. 8:12 pasa a ser 8-12)
-        bloque = bloque.replace(":", "-")
-
         if "-" in bloque:
-            # Es un rango
-            partes = bloque.split("-", 1)
-            if len(partes) == 2 and partes[0] and partes[1]:
-                # Reemplazamos la coma por punto solo al momento de convertir a float
-                # (para soportar decimales como 8,5 -> 8.5)
-                inicio = float(partes[0].replace(",", "."))
-                fin = float(partes[1].replace(",", "."))
-                total_horas += max(0.0, fin - inicio)
-            else:
-                raise ValueError("Formato de rango inválido")
+            # Caso: "8-12:30" o "13:20-17"
+            partes = bloque.split("-")
+            if len(partes) == 2:
+                try:
+                    inicio = tiempo_a_decimal(partes[0])
+                    fin = tiempo_a_decimal(partes[1])
+                    # Solo sumamos si el rango es positivo
+                    total_horas += max(0.0, fin - inicio)
+                except ValueError:
+                    continue
         else:
-            # Es una cantidad de horas directa (ej: el usuario tipeó "8" o "8,5")
-            total_horas += float(bloque.replace(",", "."))
+            # Caso: El usuario pone la cantidad directa "8.5" o "4:15"
+            try:
+                total_horas += tiempo_a_decimal(bloque)
+            except ValueError:
+                continue
 
-    return total_horas
+    # 2. REDONDEO: Usamos round(valor, 2) para evitar el 9.33333333334
+    return round(total_horas, 2)
 
 
 from db import (
@@ -364,6 +393,9 @@ class FrameRegistro(ctk.CTkFrame):
         txt = var.get().strip()
         try:
             horas = self._parse_horas(txt)
+            db_guardar_registro_dia(nombre, fecha_str, self._tipo_columna(), horas)
+            texto_reloj = decimal_a_tiempo(horas)
+            var.set(texto_reloj)
         except ValueError:
             horas = 0.0
             var.set("")
