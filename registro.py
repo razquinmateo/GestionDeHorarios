@@ -799,7 +799,7 @@ class FrameRegistro(ctk.CTkFrame):
             self, fg_color="white", border_width=1, border_color=C_GRAY200
         )
         resumen.grid(row=3, column=0, padx=16, pady=(0, 16), sticky="ew")
-        for i in range(4):
+        for i in range(5):
             resumen.columnconfigure(i, weight=1)
 
         self.res_labels = {}
@@ -809,7 +809,8 @@ class FrameRegistro(ctk.CTkFrame):
                 ("dias", "Días trabajados"),
                 ("total", "Total de horas"),
                 ("promedio", "Promedio / día"),
-                ("extras", "Horas extra est."),
+                ("extras", "Horas extras"),
+                ("nocturnas", "Horas nocturnas"),
             ]
         ):
             title_lbl = ctk.CTkLabel(
@@ -820,7 +821,7 @@ class FrameRegistro(ctk.CTkFrame):
                 resumen,
                 text="—",
                 font=ctk.CTkFont(size=18, weight="bold"),
-                text_color=C_NAVY if key != "extras" else C_BLUE,
+                text_color=C_NAVY if key not in ("extras", "nocturnas") else C_BLUE,
             )
             lbl.grid(row=1, column=i, padx=12, pady=(0, 10), sticky="w")
             self.res_title_labels[key] = title_lbl
@@ -956,7 +957,7 @@ class FrameRegistro(ctk.CTkFrame):
                     ).grid(row=semana, column=0, padx=(4, 2), pady=2)
             dia += 1
 
-        self._actualizar_resumen(registros)
+        self._actualizar_resumen()
 
     def _abrir_picker(self, event, fecha_str, var, val_actual, celda_frame):
         if self._popup_activo and self._popup_activo.winfo_exists():
@@ -986,12 +987,12 @@ class FrameRegistro(ctk.CTkFrame):
         nombre = self.empleado_actual.get()
         if not nombre:
             return
-        db_guardar_registro_dia(nombre, fecha_str, self._tipo_columna(), horas)
-        var.set(decimal_a_tiempo(horas) if horas > 0 else "")
+        tipo = self._tipo_columna()
+        horas_guardadas = self._guardar_horas_y_split(nombre, fecha_str, tipo, horas)
+        var.set(decimal_a_tiempo(horas_guardadas) if horas_guardadas > 0 else "")
         mes, anio = self.get_mes_anio()
         db_sincronizar_total_diario(nombre, mes, anio)
-        registros = db_cargar_registro_diario(nombre, mes, anio, self._tipo_columna())
-        self._actualizar_resumen(registros)
+        self._actualizar_resumen()
         app = self.winfo_toplevel()
         app.empleados = db_cargar_mes(mes, anio)
         app._refrescar_stats()
@@ -1029,39 +1030,65 @@ class FrameRegistro(ctk.CTkFrame):
         txt = var.get().strip()
         try:
             horas = self._parse_horas(txt)
-            db_guardar_registro_dia(nombre, fecha_str, self._tipo_columna(), horas)
-            var.set(decimal_a_tiempo(horas))
         except ValueError:
             horas = 0.0
-            var.set("")
-        db_guardar_registro_dia(nombre, fecha_str, self._tipo_columna(), horas)
+        tipo = self._tipo_columna()
+        horas_guardadas = self._guardar_horas_y_split(nombre, fecha_str, tipo, horas)
+        var.set(decimal_a_tiempo(horas_guardadas) if horas_guardadas > 0 else "")
         mes, anio = self.get_mes_anio()
         db_sincronizar_total_diario(nombre, mes, anio)
-        registros = db_cargar_registro_diario(nombre, mes, anio, self._tipo_columna())
-        self._actualizar_resumen(registros)
+        self._actualizar_resumen()
         app = self.winfo_toplevel()
         app.empleados = db_cargar_mes(mes, anio)
         app._refrescar_stats()
         app._refrescar_tabla()
 
-    def _actualizar_resumen(self, registros):
-        valores = [v for v in registros.values() if v > 0]
-        dias = len(valores)
-        total = sum(valores)
-        prom = total / dias if dias else 0
-
-        if self._tipo_columna() == "horas":
-            titulo_extras = "Horas extra est."
-            valor_extras = sum(max(0, v - 8) for v in valores)
-        elif self._tipo_columna() == "hrs_extras":
-            titulo_extras = "Total horas extras"
-            valor_extras = total
+    def _guardar_horas_y_split(self, nombre, fecha_str, tipo, horas):
+        if tipo == "horas":
+            fecha = date.fromisoformat(fecha_str)
+            weekday = fecha.weekday()
+            
+            if weekday < 5:  # Lunes a Viernes
+                limite = 8.0
+            else:  # Sábado y Domingo
+                limite = 4.0
+                
+            if horas > limite:
+                horas_diarias = limite
+                horas_extras = horas - limite
+            else:
+                horas_diarias = horas
+                horas_extras = 0.0
+                
+            db_guardar_registro_dia(nombre, fecha_str, "horas", horas_diarias)
+            db_guardar_registro_dia(nombre, fecha_str, "hrs_extras", horas_extras)
+            return horas_diarias
         else:
-            titulo_extras = "Total horas noct."
-            valor_extras = total
+            db_guardar_registro_dia(nombre, fecha_str, tipo, horas)
+            return horas
 
-        self.res_title_labels["extras"].configure(text=titulo_extras)
+    def _actualizar_resumen(self):
+        nombre = self.empleado_actual.get()
+        if not nombre:
+            for key in self.res_labels:
+                self.res_labels[key].configure(text="—")
+            return
+
+        mes, anio = self.get_mes_anio()
+        reg_horas = db_cargar_registro_diario(nombre, mes, anio, "horas")
+        reg_extras = db_cargar_registro_diario(nombre, mes, anio, "hrs_extras")
+        reg_noct = db_cargar_registro_diario(nombre, mes, anio, "hrs_noct")
+
+        valores_horas = [v for v in reg_horas.values() if v > 0]
+        dias = len(valores_horas)
+        total_horas = sum(valores_horas)
+        prom = total_horas / dias if dias else 0
+
+        total_extras = sum(v for v in reg_extras.values() if v > 0)
+        total_noct = sum(v for v in reg_noct.values() if v > 0)
+
         self.res_labels["dias"].configure(text=str(dias))
-        self.res_labels["total"].configure(text=f"{total:.1f} hs")
+        self.res_labels["total"].configure(text=f"{total_horas:.1f} hs")
         self.res_labels["promedio"].configure(text=f"{prom:.1f} hs")
-        self.res_labels["extras"].configure(text=f"{valor_extras:.1f} hs")
+        self.res_labels["extras"].configure(text=f"{total_extras:.1f} hs")
+        self.res_labels["nocturnas"].configure(text=f"{total_noct:.1f} hs")
